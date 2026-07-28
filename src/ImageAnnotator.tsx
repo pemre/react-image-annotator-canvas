@@ -213,6 +213,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({
   showLabels = false,
   onSelect,
   theme,
+  integerCoordinates = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
@@ -235,6 +236,11 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({
       onChange(next)
     },
     [onChange]
+  )
+
+  const roundIfNeeded = useCallback(
+    (n: number): number => (integerCoordinates ? Math.round(n) : n),
+    [integerCoordinates]
   )
 
   const selectionEnabled = selectionMode !== 'none'
@@ -606,7 +612,8 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({
 
     if (interaction.kind === 'resize') {
       const updated = applyResize(interaction.original, interaction.handle, p, naturalSize)
-      const next = annotations.map((a) => (a.id === interaction.boxId ? { ...updated, isSelected: a.isSelected } : a))
+      const rounded = { ...updated, x: roundIfNeeded(updated.x), y: roundIfNeeded(updated.y), width: roundIfNeeded(updated.width), height: roundIfNeeded(updated.height) }
+      const next = annotations.map((a) => (a.id === interaction.boxId ? { ...rounded, isSelected: a.isSelected } : a))
       commitChange(next)
       return
     }
@@ -628,7 +635,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({
       }
 
       const next = annotations.map((a) =>
-        a.id === interaction.boxId ? { ...a, x: targetX, y: targetY } : a
+        a.id === interaction.boxId ? { ...a, x: roundIfNeeded(targetX), y: roundIfNeeded(targetY) } : a
       )
       setInteraction({ ...interaction, started: true })
       commitChange(next)
@@ -661,10 +668,10 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({
               typeof crypto !== 'undefined' && 'randomUUID' in crypto
                 ? crypto.randomUUID()
                 : `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-            x,
-            y,
-            width: w,
-            height: h,
+            x: roundIfNeeded(x),
+            y: roundIfNeeded(y),
+            width: roundIfNeeded(w),
+            height: roundIfNeeded(h),
             categoryId: activeCategoryId,
             isSelected: false,
           }
@@ -743,7 +750,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({
           targetX = Math.max(0, Math.min(naturalSize.width - a.width, targetX))
           targetY = Math.max(0, Math.min(naturalSize.height - a.height, targetY))
         }
-        return { ...a, x: targetX, y: targetY }
+        return { ...a, x: roundIfNeeded(targetX), y: roundIfNeeded(targetY) }
       })
       commitChange(next)
     }

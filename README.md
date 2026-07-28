@@ -82,6 +82,7 @@ export function Labeler() {
 | `editingEnabled`    | `boolean`                                  | `true`      | Selected annotations show handles + delete button; body is draggable to move.              |
 | `selectionMode`     | `'single' \| 'multi' \| 'none'`            | `'single'`  | How selection works.                                                                       |
 | `showLabels`        | `boolean`                                  | `false`     | Render the category label inside the top-left of each annotation.                          |
+| `integerCoordinates`| `boolean`                                  | `false`     | Round all annotation coordinates (x, y, width, height) to integers before emitting via `onChange`. |
 | `onSelect`          | `(annotation: Annotation \| null) => void` | —           | Fires when an annotation is selected/clicked. `null` when the user clicks empty space.     |
 | `theme`             | `AnnotatorTheme`                           | see source  | Override visual defaults (handle size, selection stroke, etc.).                            |
 

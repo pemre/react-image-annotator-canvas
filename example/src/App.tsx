@@ -32,6 +32,7 @@ export function App() {
   // Selection & Drawing Modes
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('single')
   const [showLabels, setShowLabels] = useState(true)
+  const [integerCoordinates, setIntegerCoordinates] = useState(false)
   
   // Theme Overrides
   const [selectionStroke, setSelectionStroke] = useState('#ff007f') // Hot Pink
@@ -176,6 +177,7 @@ export function App() {
               editingEnabled={!isLocked}
               selectionMode={selectionMode}
               showLabels={showLabels}
+              integerCoordinates={integerCoordinates}
               theme={themeConfig}
               onSelect={handleSelect}
             />
@@ -247,6 +249,16 @@ export function App() {
               </label>
             </div>
 
+            <div className="form-group row">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={integerCoordinates}
+                  onChange={(e) => setIntegerCoordinates(e.target.checked)}
+                />
+                Integer Coordinates (integerCoordinates)
+              </label>
+            </div>
 
           </section>
 
