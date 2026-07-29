@@ -37,6 +37,7 @@ type Interaction =
       started: boolean
       additive: boolean
       originallySelected: boolean
+      movingBoxes: Array<{ id: Id; x: number; y: number; width: number; height: number }>
     }
 
 type Press =
@@ -195,6 +196,103 @@ function applyResize(
   return normalizeRect({ ...original, x, y, width, height })
 }
 
+function snapEdges(
+  movingEdges: { left: number; right: number; top: number; bottom: number },
+  otherBoxes: Array<{ x: number; y: number; width: number; height: number }>,
+  imageBounds: { width: number; height: number } | null,
+  threshold: number
+): { dx: number; dy: number } {
+  const xTargets = [
+    ...(imageBounds ? [0, imageBounds.width] : [0]),
+    ...otherBoxes.flatMap((box) => [box.x, box.x + box.width]),
+  ]
+  const yTargets = [
+    ...(imageBounds ? [0, imageBounds.height] : [0]),
+    ...otherBoxes.flatMap((box) => [box.y, box.y + box.height]),
+  ]
+
+  const closestAdjustment = (edges: number[], targets: number[]): number => {
+    let closest: { distance: number; adjustment: number } | null = null
+    for (const edge of edges) {
+      for (const target of targets) {
+        const adjustment = target - edge
+        const distance = Math.abs(adjustment)
+        if (distance <= threshold && (closest === null || distance < closest.distance)) {
+          closest = { distance, adjustment }
+        }
+      }
+    }
+    return closest?.adjustment ?? 0
+  }
+
+  return {
+    dx: closestAdjustment([movingEdges.left, movingEdges.right], xTargets),
+    dy: closestAdjustment([movingEdges.top, movingEdges.bottom], yTargets),
+  }
+}
+
+function closestSnapTarget(edge: number, targets: number[], threshold: number): number | null {
+  let closest: { distance: number; target: number } | null = null
+  for (const target of targets) {
+    const distance = Math.abs(edge - target)
+    if (distance <= threshold && (closest === null || distance < closest.distance)) {
+      closest = { distance, target }
+    }
+  }
+  return closest?.target ?? null
+}
+
+function snapResizedRect(
+  rect: Annotation,
+  handle: ResizeHandle,
+  otherBoxes: Array<{ x: number; y: number; width: number; height: number }>,
+  imageBounds: { width: number; height: number } | null,
+  threshold: number,
+  minSize = 5
+): Annotation {
+  const xTargets = [
+    ...(imageBounds ? [0, imageBounds.width] : [0]),
+    ...otherBoxes.flatMap((box) => [box.x, box.x + box.width]),
+  ]
+  const yTargets = [
+    ...(imageBounds ? [0, imageBounds.height] : [0]),
+    ...otherBoxes.flatMap((box) => [box.y, box.y + box.height]),
+  ]
+
+  let { x, y, width, height } = rect
+  if (handle.includes('left')) {
+    const target = closestSnapTarget(x, xTargets, threshold)
+    if (target !== null) {
+      const right = x + width
+      x = Math.min(target, right - minSize)
+      width = right - x
+    }
+  } else if (handle.includes('right')) {
+    const target = closestSnapTarget(x + width, xTargets, threshold)
+    if (target !== null) {
+      const right = Math.max(target, x + minSize)
+      width = right - x
+    }
+  }
+
+  if (handle.includes('top')) {
+    const target = closestSnapTarget(y, yTargets, threshold)
+    if (target !== null) {
+      const bottom = y + height
+      y = Math.min(target, bottom - minSize)
+      height = bottom - y
+    }
+  } else if (handle.includes('bottom')) {
+    const target = closestSnapTarget(y + height, yTargets, threshold)
+    if (target !== null) {
+      const bottom = Math.max(target, y + minSize)
+      height = bottom - y
+    }
+  }
+
+  return normalizeRect({ ...rect, x, y, width, height })
+}
+
 function buildCategoryIndex(categories: Category[] | undefined): Map<string, Category> {
   const map = new Map<string, Category>()
   if (categories) for (const c of categories) map.set(c.id, c)
@@ -214,6 +312,8 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({
   onSelect,
   theme,
   integerCoordinates = false,
+  snapToEdges = false,
+  snapThreshold = 8,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
@@ -512,6 +612,9 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({
               started: false,
               additive,
               originallySelected: true,
+              movingBoxes: annotations
+                .filter((candidate) => candidate.isSelected)
+                .map(({ id, x, y, width, height }) => ({ id, x, y, width, height })),
             })
           } else {
             pressRef.current = { kind: 'select', boxId: a.id, additive }
@@ -532,6 +635,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({
               started: false,
               additive,
               originallySelected: false,
+              movingBoxes: [{ id: a.id, x: a.x, y: a.y, width: a.width, height: a.height }],
             })
           }
           return
@@ -611,32 +715,77 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({
     }
 
     if (interaction.kind === 'resize') {
-      const updated = applyResize(interaction.original, interaction.handle, p, naturalSize)
-      const rounded = { ...updated, x: roundIfNeeded(updated.x), y: roundIfNeeded(updated.y), width: roundIfNeeded(updated.width), height: roundIfNeeded(updated.height) }
+      let updated = applyResize(interaction.original, interaction.handle, p, naturalSize)
+      if (snapToEdges) {
+        const otherBoxes = annotations
+          .filter((a) => a.id !== interaction.boxId)
+          .map(({ x, y, width, height }) => ({ x, y, width, height }))
+        updated = snapResizedRect(updated, interaction.handle, otherBoxes, naturalSize, snapThreshold)
+      }
+      const rounded = {
+        ...updated,
+        x: roundIfNeeded(updated.x),
+        y: roundIfNeeded(updated.y),
+        width: roundIfNeeded(updated.width),
+        height: roundIfNeeded(updated.height),
+      }
       const next = annotations.map((a) => (a.id === interaction.boxId ? { ...rounded, isSelected: a.isSelected } : a))
       commitChange(next)
       return
     }
 
     if (interaction.kind === 'move') {
-      const dx = p.x - interaction.startX
-      const dy = p.y - interaction.startY
-      if (!interaction.started && Math.hypot(dx, dy) < DRAG_THRESHOLD) return
+      const rawDx = p.x - interaction.startX
+      const rawDy = p.y - interaction.startY
+      if (!interaction.started && Math.hypot(rawDx, rawDy) < DRAG_THRESHOLD) return
 
-      let targetX = interaction.originalX + dx
-      let targetY = interaction.originalY + dy
-
-      if (naturalSize) {
-        const box = annotations.find((a) => a.id === interaction.boxId)
-        if (box) {
-          targetX = Math.max(0, Math.min(naturalSize.width - box.width, targetX))
-          targetY = Math.max(0, Math.min(naturalSize.height - box.height, targetY))
-        }
+      let finalDx = rawDx
+      let finalDy = rawDy
+      if (snapToEdges) {
+        const movingEdges = interaction.movingBoxes.reduce(
+          (edges, box) => ({
+            left: Math.min(edges.left, box.x + rawDx),
+            right: Math.max(edges.right, box.x + box.width + rawDx),
+            top: Math.min(edges.top, box.y + rawDy),
+            bottom: Math.max(edges.bottom, box.y + box.height + rawDy),
+          }),
+          { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity }
+        )
+        const movingIds = new Set(interaction.movingBoxes.map((box) => box.id))
+        const otherBoxes = annotations
+          .filter((a) => !movingIds.has(a.id))
+          .map(({ x, y, width, height }) => ({ x, y, width, height }))
+        const adjustment = snapEdges(movingEdges, otherBoxes, naturalSize, snapThreshold)
+        finalDx += adjustment.dx
+        finalDy += adjustment.dy
       }
 
-      const next = annotations.map((a) =>
-        a.id === interaction.boxId ? { ...a, x: roundIfNeeded(targetX), y: roundIfNeeded(targetY) } : a
-      )
+      if (naturalSize) {
+        const bounds = interaction.movingBoxes.reduce(
+          (box, moving) => ({
+            left: Math.min(box.left, moving.x),
+            right: Math.max(box.right, moving.x + moving.width),
+            top: Math.min(box.top, moving.y),
+            bottom: Math.max(box.bottom, moving.y + moving.height),
+          }),
+          { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity }
+        )
+        finalDx = Math.max(-bounds.left, Math.min(naturalSize.width - bounds.right, finalDx))
+        finalDy = Math.max(-bounds.top, Math.min(naturalSize.height - bounds.bottom, finalDy))
+      }
+
+      const movingIds = new Set(interaction.movingBoxes.map((box) => box.id))
+      const originalById = new Map(interaction.movingBoxes.map((box) => [box.id, box]))
+      const next = annotations.map((a) => {
+        const original = originalById.get(a.id)
+        return original && movingIds.has(a.id)
+          ? {
+              ...a,
+              x: roundIfNeeded(original.x + finalDx),
+              y: roundIfNeeded(original.y + finalDy),
+            }
+          : a
+      })
       setInteraction({ ...interaction, started: true })
       commitChange(next)
     }

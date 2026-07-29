@@ -97,4 +97,10 @@ export interface ImageAnnotatorProps {
    * keyboard-nudge. Default: false (preserve current float behaviour).
    */
   integerCoordinates?: boolean
+
+  /** When true, dragging/resizing snaps box edges to other boxes and image borders. Default: false. */
+  snapToEdges?: boolean
+
+  /** Snapping distance in image pixels. Only effective when snapToEdges is true. Default: 8. */
+  snapThreshold?: number
 }

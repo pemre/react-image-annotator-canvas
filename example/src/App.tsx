@@ -33,6 +33,8 @@ export function App() {
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('single')
   const [showLabels, setShowLabels] = useState(true)
   const [integerCoordinates, setIntegerCoordinates] = useState(false)
+  const [snapToEdges, setSnapToEdges] = useState(false)
+  const [snapThreshold, setSnapThreshold] = useState(8)
   
   // Theme Overrides
   const [selectionStroke, setSelectionStroke] = useState('#ff007f') // Hot Pink
@@ -178,6 +180,8 @@ export function App() {
               selectionMode={selectionMode}
               showLabels={showLabels}
               integerCoordinates={integerCoordinates}
+              snapToEdges={snapToEdges}
+              snapThreshold={snapThreshold}
               theme={themeConfig}
               onSelect={handleSelect}
             />
@@ -258,6 +262,29 @@ export function App() {
                 />
                 Integer Coordinates (integerCoordinates)
               </label>
+            </div>
+
+            <div className="form-group row">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={snapToEdges}
+                  onChange={(e) => setSnapToEdges(e.target.checked)}
+                />
+                Snap to Edges (snapToEdges)
+              </label>
+            </div>
+
+            <div className="form-group">
+              <label>Snap Threshold: {snapThreshold}px</label>
+              <input
+                type="range"
+                min="1"
+                max="50"
+                value={snapThreshold}
+                disabled={!snapToEdges}
+                onChange={(e) => setSnapThreshold(parseInt(e.target.value))}
+              />
             </div>
 
           </section>
