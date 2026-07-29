@@ -1,6 +1,10 @@
 # react-image-annotator-canvas
 
+**[Live Demo](https://pemre.github.io/react-image-annotator-canvas/)**
+
 A small, dependency-free React component for drawing rectangular annotations on an image via an HTML canvas. Define your own categories — the library is intentionally not opinionated about what an annotation *means*.
+
+> **Note:** This is a fork of [arun-k-y/react-image-annotator-canvas](https://github.com/arun-k-y/react-image-annotator-canvas). Changes and improvements are contributed back to the original repository where possible.
 
 Use it for:
 
@@ -83,6 +87,8 @@ export function Labeler() {
 | `selectionMode`     | `'single' \| 'multi' \| 'none'`            | `'single'`  | How selection works.                                                                       |
 | `showLabels`        | `boolean`                                  | `false`     | Render the category label inside the top-left of each annotation.                          |
 | `integerCoordinates`| `boolean`                                  | `false`     | Round all annotation coordinates (x, y, width, height) to integers before emitting via `onChange`. |
+| `snapToEdges`       | `boolean`                                  | `false`     | When enabled, dragging or resizing a box snaps its edges to other annotation boxes and image borders within `snapThreshold` pixels. |
+| `snapThreshold`     | `number`                                   | `8`         | Snapping distance in image pixels. Only effective when `snapToEdges` is `true`. |
 | `onSelect`          | `(annotation: Annotation \| null) => void` | —           | Fires when an annotation is selected/clicked. `null` when the user clicks empty space.     |
 | `theme`             | `AnnotatorTheme`                           | see source  | Override visual defaults (handle size, selection stroke, etc.).                            |
 
@@ -138,6 +144,18 @@ The canvas is focusable (`tabIndex={0}`); click into it once and:
 | `Esc`                     | Clears the selection.                                                                 |
 | Arrow keys                | Nudges the selected annotation(s) by 1 image-pixel. Requires `editingEnabled`.        |
 | `Shift` + arrow keys      | Nudges by 10 image-pixels.                                                            |
+
+### Snapping
+
+When `snapToEdges` is enabled, dragging or resizing an annotation snaps its
+edges to other annotation boxes and the image borders. Adjacent boxes
+(snap to opposite edges) get a 1px offset so their borders touch without
+overlapping. Aligned boxes (snap to same-type edges) stay flush. Dragging
+or resizing beyond `snapThreshold` allows overlap — snapping is a magnetic
+guide, not a hard constraint.
+
+Multi-selected boxes move together as a group, and snapping applies to the
+group's bounding box against non-selected boxes.
 
 ### Responsive sizing
 
