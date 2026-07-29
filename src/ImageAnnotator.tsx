@@ -202,19 +202,31 @@ function snapEdges(
   imageBounds: { width: number; height: number } | null,
   threshold: number
 ): { dx: number; dy: number } {
-  const xTargets = [
-    ...(imageBounds ? [0, imageBounds.width] : [0]),
-    ...otherBoxes.flatMap((box) => [box.x, box.x + box.width]),
-  ]
-  const yTargets = [
-    ...(imageBounds ? [0, imageBounds.height] : [0]),
-    ...otherBoxes.flatMap((box) => [box.y, box.y + box.height]),
-  ]
+  // Image-border targets: no offset (snap flush to 0 / imageWidth / etc.)
+  const borderX = imageBounds ? [0, imageBounds.width] : [0]
+  const borderY = imageBounds ? [0, imageBounds.height] : [0]
 
-  const closestAdjustment = (edges: number[], targets: number[]): number => {
+  // Box-to-box targets: left/top edges get +1, right/bottom edges get -1
+  // so adjacent boxes share no pixel (borders touch without overlapping).
+  const boxXTargets = otherBoxes.flatMap((box) => [box.x, box.x + box.width])
+  const boxYTargets = otherBoxes.flatMap((box) => [box.y, box.y + box.height])
+
+  const closestAdjustment = (
+    edges: { value: number; offset: number }[],
+    boxTargets: number[],
+    borderTargets: number[]
+  ): number => {
     let closest: { distance: number; adjustment: number } | null = null
-    for (const edge of edges) {
-      for (const target of targets) {
+    for (const { value: edge, offset } of edges) {
+      for (const target of boxTargets) {
+        const adjustedTarget = target + offset
+        const adjustment = adjustedTarget - edge
+        const distance = Math.abs(adjustment)
+        if (distance <= threshold && (closest === null || distance < closest.distance)) {
+          closest = { distance, adjustment }
+        }
+      }
+      for (const target of borderTargets) {
         const adjustment = target - edge
         const distance = Math.abs(adjustment)
         if (distance <= threshold && (closest === null || distance < closest.distance)) {
@@ -226,14 +238,35 @@ function snapEdges(
   }
 
   return {
-    dx: closestAdjustment([movingEdges.left, movingEdges.right], xTargets),
-    dy: closestAdjustment([movingEdges.top, movingEdges.bottom], yTargets),
+    dx: closestAdjustment(
+      [{ value: movingEdges.left, offset: 1 }, { value: movingEdges.right, offset: -1 }],
+      boxXTargets,
+      borderX
+    ),
+    dy: closestAdjustment(
+      [{ value: movingEdges.top, offset: 1 }, { value: movingEdges.bottom, offset: -1 }],
+      boxYTargets,
+      borderY
+    ),
   }
 }
 
-function closestSnapTarget(edge: number, targets: number[], threshold: number): number | null {
+function closestSnapTarget(
+  edge: number,
+  boxTargets: number[],
+  borderTargets: number[],
+  threshold: number,
+  offset: number
+): number | null {
   let closest: { distance: number; target: number } | null = null
-  for (const target of targets) {
+  for (const target of boxTargets) {
+    const adjustedTarget = target + offset
+    const distance = Math.abs(edge - adjustedTarget)
+    if (distance <= threshold && (closest === null || distance < closest.distance)) {
+      closest = { distance, target: adjustedTarget }
+    }
+  }
+  for (const target of borderTargets) {
     const distance = Math.abs(edge - target)
     if (distance <= threshold && (closest === null || distance < closest.distance)) {
       closest = { distance, target }
@@ -250,25 +283,21 @@ function snapResizedRect(
   threshold: number,
   minSize = 5
 ): Annotation {
-  const xTargets = [
-    ...(imageBounds ? [0, imageBounds.width] : [0]),
-    ...otherBoxes.flatMap((box) => [box.x, box.x + box.width]),
-  ]
-  const yTargets = [
-    ...(imageBounds ? [0, imageBounds.height] : [0]),
-    ...otherBoxes.flatMap((box) => [box.y, box.y + box.height]),
-  ]
+  const boxXTargets = otherBoxes.flatMap((box) => [box.x, box.x + box.width])
+  const boxYTargets = otherBoxes.flatMap((box) => [box.y, box.y + box.height])
+  const borderX = imageBounds ? [0, imageBounds.width] : [0]
+  const borderY = imageBounds ? [0, imageBounds.height] : [0]
 
   let { x, y, width, height } = rect
   if (handle.includes('left')) {
-    const target = closestSnapTarget(x, xTargets, threshold)
+    const target = closestSnapTarget(x, boxXTargets, borderX, threshold, 1)
     if (target !== null) {
       const right = x + width
       x = Math.min(target, right - minSize)
       width = right - x
     }
   } else if (handle.includes('right')) {
-    const target = closestSnapTarget(x + width, xTargets, threshold)
+    const target = closestSnapTarget(x + width, boxXTargets, borderX, threshold, -1)
     if (target !== null) {
       const right = Math.max(target, x + minSize)
       width = right - x
@@ -276,14 +305,14 @@ function snapResizedRect(
   }
 
   if (handle.includes('top')) {
-    const target = closestSnapTarget(y, yTargets, threshold)
+    const target = closestSnapTarget(y, boxYTargets, borderY, threshold, 1)
     if (target !== null) {
       const bottom = y + height
       y = Math.min(target, bottom - minSize)
       height = bottom - y
     }
   } else if (handle.includes('bottom')) {
-    const target = closestSnapTarget(y + height, yTargets, threshold)
+    const target = closestSnapTarget(y + height, boxYTargets, borderY, threshold, -1)
     if (target !== null) {
       const bottom = Math.max(target, y + minSize)
       height = bottom - y
